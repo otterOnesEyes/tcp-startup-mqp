@@ -132,10 +132,7 @@ def stop_bg(ssh, pidfile):
 
 def stop_bg_sudo(ssh, password, pidfile):
     cmd = (
-        "if [ -f {pid} ]; then "
-        "kill $(cat {pid}) 2>/dev/null || true; "
-        "rm -f {pid}; "
-        "fi"
+        "\x03"
     ).format(pid=shlex.quote(pidfile))
     sudo(ssh, password, cmd)
 
@@ -271,6 +268,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     )
 
     # One-shot iperf3 server.
+    print("start server for test {}/{} against server {}...".format(number, args.num_tests, server_ip))
     start_bg(
         server_ssh,
         "iperf3 -s -p {} -1 -i {}".format(args.iperf_port, args.interval),
@@ -298,7 +296,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     )
 
     time.sleep(1)
-
+    print("Running iperf3 download test against server {}...".format(server_ip))
     try:
         # -R = reverse mode = SERVER -> CLIENT = download.
         iperf_cmd = "iperf3 -R -c {} -p {} -t {} -i {}".format(
@@ -316,6 +314,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
         time.sleep(1)
 
     finally:
+        print("Stopping background processes for test {}/{} against server {}...".format(number, args.num_tests, server_ip))
         stop_bg_sudo(client, client_pass, client_tcpdump_pid)
         stop_bg_sudo(server_ssh, server_pass, server_tcpdump_pid)
         stop_bg_sudo(server_ssh, server_pass, server_log_pid)
@@ -355,7 +354,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     sftp_get(server_ssh, server_pcap, local_server_pcap)
     sftp_get(server_ssh, server_config, local_server_config)
     sftp_get(server_ssh, server_log, local_server_log)
-    sftp_get(client, client_pcap, local_client_pcap)
+    #sftp_get(client, client_pcap, local_client_pcap)
 
     # Clean remote temporary files.
     sudo(
@@ -383,6 +382,11 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
 
     print("[OK] Raw results copied to:")
     print(run_dir)
+
+    try:
+        channel.send('\x03')
+    except:
+        pass
 
     return {
         "server_id": server_id,
@@ -508,6 +512,7 @@ def main():
             os.makedirs(run_dir, exist_ok=True)
 
             for server_ssh, server_ip, server_interface in servers:
+                print("Running test {}/{} against server {}...".format(i, args.num_tests, server_ip))
                 job = run_test(
                     args,
                     i,
