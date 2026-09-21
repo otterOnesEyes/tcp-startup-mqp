@@ -23,6 +23,7 @@ struct hybla {
 	u32   rho_3ls;	      /* Rho parameter, <<3 */
 	u32   rho2_7ls;	      /* Rho^2, <<7	*/
 	u32   minrtt_us;      /* Minimum smoothed round trip time value seen */
+	u32   rnd;        /* Round number for how many rounds have passed. */
 };
 
 /* Hybla reference round trip time (default= 1/40 sec = 25 ms), in ms */
@@ -54,6 +55,7 @@ static void hybla_init(struct sock *sk)
 	ca->rho2_7ls = 0;
 	ca->snd_cwnd_cents = 0;
 	ca->hybla_en = true;
+	ca->rnd = 0;
 	tcp_snd_cwnd_set(tp, 2);
 	tp->snd_cwnd_clamp = 65535;
 
@@ -113,6 +115,8 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 
 	rho_fractions = ca->rho_3ls - (ca->rho << 3);
 
+	int prev = tcp_snd_cwnd(tp);
+
 	if (tcp_in_slow_start(tp)) {
 		/*
 		 * slow start
@@ -141,11 +145,21 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 		if (increment < 128)
 			tp->snd_cwnd_cnt++;
 	}
-
+	
 	odd = increment % 128;
 	tcp_snd_cwnd_set(tp, tcp_snd_cwnd(tp) + (increment >> 7));
 	ca->snd_cwnd_cents += odd;
+	ca->rnd = ca->rnd + 1;
+	int diff = tcp_snd_cwnd(tp) - prev;
+	float pct = (diff / prev);
 
+	if (is_slowstart == 1){
+		pr_info("[Hybla] [sk: %p] ROUND %u | stage: Slow Start, cwnd: %u, srtt: %u us, growth: %+d pkts (%+d%%)\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, diff, pct);
+	} else {
+		pr_info("[Hybla] [sk: %p] ROUND %u | stage: Congestion Avoidance, cwnd: %u, srtt: %u us, growth: %+d pkts (%+d%%)\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, diff, pct);
+	}
 	/* check when fractions goes >=128 and increase cwnd by 1. */
 	while (ca->snd_cwnd_cents >= 128) {
 		tcp_snd_cwnd_set(tp, tcp_snd_cwnd(tp) + 1);
