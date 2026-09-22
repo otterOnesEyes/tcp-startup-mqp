@@ -783,7 +783,7 @@ static void bbr_update_bw(struct sock *sk, const struct rate_sample *rs)
 		bbr->round_start = 1;
 		bbr->packet_conservation = 0;
 		int diff = tp->snd_cwnd - bbr->prev_cwnd;
-		float pct = diff / bbr->prev_cwnd;
+		int pct = diff / bbr->prev_cwnd;
 		pr_info("[BBR] [sk: %p] ROUND %u | stage: %s, cwnd: %u, min_rtt: %u us, growth: %+d pkts (%+d%%)\n",
 	            sk, bbr->rtt_cnt, bbr_stage_str(bbr->mode), tp->snd_cwnd, bbr->min_rtt_us, diff, pct);
 		bbr->prev_cwnd = tp->snd_cwnd;

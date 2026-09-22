@@ -151,7 +151,7 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 	ca->snd_cwnd_cents += odd;
 	ca->rnd = ca->rnd + 1;
 	int diff = tcp_snd_cwnd(tp) - prev;
-	float pct = (diff / prev);
+	int pct = (diff / prev);
 
 	if (is_slowstart == 1){
 		pr_info("[Hybla] [sk: %p] ROUND %u | stage: Slow Start, cwnd: %u, srtt: %u us, growth: %+d pkts (%+d%%)\n",
