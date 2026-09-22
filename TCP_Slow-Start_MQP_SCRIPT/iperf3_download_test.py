@@ -40,9 +40,6 @@ import paramiko
 from pcap_analysis import analyze_pcap_and_plot
 from iperf_text_analysis import parse_cwnd, plot_cwnd
 
-# NOTE: server.log (kernel CCRG log) is still downloaded per test below,
-# but parsing/graphing it is deferred until kernel_log_analysis.py is
-# built out with a real sample log line.
 
 
 def connect(ip, user, password, port=22):
@@ -236,8 +233,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     # Capture server kernel log during this test.
     # Keep only CCRG messages, matching the earlier experiment script.
     server_log_cmd = (
-        "stdbuf -oL tail -n 0 -F /var/log/kern.log "
-        "| grep --line-buffered '\\[CCRG\\]'"
+        "dmesg -wH | grep --line-buffered 'ccrg:'"
     )
 
     start_bg_sudo(
@@ -271,7 +267,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     print("start server for test {}/{} against server {}...".format(number, args.num_tests, server_ip))
     start_bg(
         server_ssh,
-        "iperf3 -s -p {} -1 -i {}".format(args.iperf_port, args.interval),
+        "sudo iperf3 -s -p {} -1 -i {}".format(args.iperf_port, args.interval),
         iperf_pid,
         server_iperf,
         "/tmp/iperf3_server.err",
@@ -299,7 +295,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     print("Running iperf3 download test against server {}...".format(server_ip))
     try:
         # -R = reverse mode = SERVER -> CLIENT = download.
-        iperf_cmd = "iperf3 -R -c {} -p {} -t {} -i {}".format(
+        iperf_cmd = "sudo iperf3 -R -c {} -p {} -t {} -i {}".format(
             shlex.quote(server_ip),
             args.iperf_port,
             args.duration,
@@ -457,7 +453,7 @@ def main():
 
     parser.add_argument("--server-ssh-port", type=int, default=22)
     parser.add_argument("--client-ssh-port", type=int, default=22)
-    parser.add_argument("--iperf-port", type=int, default=5201)
+    parser.add_argument("--iperf_port", type=int, default=5201)
     parser.add_argument("--duration", type=int, default=10)
     parser.add_argument("--interval", type=float, default=1)
     parser.add_argument("--num-tests", type=int, default=3)
