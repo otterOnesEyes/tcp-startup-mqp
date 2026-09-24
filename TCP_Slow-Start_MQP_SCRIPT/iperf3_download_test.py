@@ -230,7 +230,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     # Capture server kernel log during this test.
     # Keep only CCRG messages, matching the earlier experiment script.
     server_log_cmd = (
-        "sh -c \"dmesg -wH | grep --line-buffered 'ccrg:'\""
+        "dmesg -w"
     )
 
     start_bg_sudo(
