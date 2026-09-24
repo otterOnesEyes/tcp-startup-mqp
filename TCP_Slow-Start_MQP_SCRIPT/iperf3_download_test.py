@@ -129,7 +129,11 @@ def stop_bg(ssh, pidfile):
 
 def stop_bg_sudo(ssh, password, pidfile):
     cmd = (
-        "\x03"
+        "if [ -f {pid} ]; then "
+        "pkill -P $(cat {pid}) 2>/dev/null; "
+        "kill $(cat {pid}) 2>/dev/null || true; "
+        "rm -f {pid}; "
+        "fi"
     ).format(pid=shlex.quote(pidfile))
     sudo(ssh, password, cmd)
 
@@ -195,13 +199,6 @@ def save_server_config(ssh, path, interface):
 
 
 def run_test(args, number, server_ssh, server_ip, server_interface, client, client_interface, server_pass, client_pass, run_dir, name):
-    """
-    Runs one iperf3 download test against one server, downloads the
-    resulting raw files, and returns their paths for later parsing.
-    Does NOT parse or graph anything itself - that happens afterward,
-    in main(), once every test against every server has finished.
-    """
-
     server_id = server_ip.replace('.', '_')
 
     server_root = os.path.join(run_dir, "servers", server_id)
@@ -233,7 +230,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     # Capture server kernel log during this test.
     # Keep only CCRG messages, matching the earlier experiment script.
     server_log_cmd = (
-        "dmesg -wH | grep --line-buffered 'ccrg:'"
+        "sh -c \"dmesg -wH | grep --line-buffered 'ccrg:'\""
     )
 
     start_bg_sudo(
@@ -267,7 +264,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     print("start server for test {}/{} against server {}...".format(number, args.num_tests, server_ip))
     start_bg(
         server_ssh,
-        "sudo iperf3 -s -p {} -1 -i {}".format(args.iperf_port, args.interval),
+        "iperf3 -s -p {} -1 -i {}".format(args.iperf_port, args.interval),
         iperf_pid,
         server_iperf,
         "/tmp/iperf3_server.err",
@@ -295,7 +292,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     print("Running iperf3 download test against server {}...".format(server_ip))
     try:
         # -R = reverse mode = SERVER -> CLIENT = download.
-        iperf_cmd = "sudo iperf3 -R -c {} -p {} -t {} -i {}".format(
+        iperf_cmd = "iperf3 -R -c {} -p {} -t {} -i {}".format(
             shlex.quote(server_ip),
             args.iperf_port,
             args.duration,
@@ -397,12 +394,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
 
 
 def process_results(jobs):
-    """
-    Runs all parsing and graphing for every completed test, after every
-    test against every server has finished. Graphs are written into
-    each job's own server_dir, so they land next to the raw data for
-    the correct run and the correct server.
-    """
+
     print("\nProcessing results for {} test(s)...".format(len(jobs)))
 
     for job in jobs:
