@@ -117,7 +117,6 @@ struct bbr {
 		unused_b:5;
 	u32	prior_cwnd;	/* prior cwnd upon entering loss recovery */
 	u32	full_bw;	/* recent bw, to estimate if pipe is full */
-	u32 prev_cwnd;  /* prior cwnd from last RTT*/
 
 	/* For tracking ACK aggregation: */
 	u64	ack_epoch_mstamp;	/* start of ACK sampling epoch */
@@ -782,11 +781,8 @@ static void bbr_update_bw(struct sock *sk, const struct rate_sample *rs)
 		bbr->rtt_cnt++;
 		bbr->round_start = 1;
 		bbr->packet_conservation = 0;
-		int diff = tp->snd_cwnd - bbr->prev_cwnd;
-		int pct = diff / bbr->prev_cwnd;
-		pr_info("[BBR] [sk: %p] ROUND %u | stage: %s, cwnd: %u, min_rtt: %u us, growth: %+d pkts (%+d%%)\n",
-	            sk, bbr->rtt_cnt, bbr_stage_str(bbr->mode), tp->snd_cwnd, bbr->min_rtt_us, diff, pct);
-		bbr->prev_cwnd = tp->snd_cwnd;
+		pr_info("[BBR] [sk: %p] ROUND %u | stage: %s, cwnd: %u, min_rtt: %u us\n",
+	            sk, bbr->rtt_cnt, bbr_stage_str(bbr->mode), tp->snd_cwnd, bbr->min_rtt_us);
 	}
 
 	bbr_lt_bw_sampling(sk, rs);
@@ -1087,8 +1083,6 @@ __bpf_kfunc static void bbr_init(struct sock *sk)
 	bbr->extra_acked_win_idx = 0;
 	bbr->extra_acked[0] = 0;
 	bbr->extra_acked[1] = 0;
-
-	bbr->prev_cwnd = 1;
 
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
 }
