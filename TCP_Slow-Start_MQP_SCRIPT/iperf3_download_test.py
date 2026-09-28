@@ -39,6 +39,7 @@ import paramiko
 
 from pcap_analysis import analyze_pcap_and_plot
 from iperf_text_analysis import parse_cwnd, plot_cwnd
+from kernel_log_analysis import parse as parse_kernel_log, clean_data, plot_cwnd as plot_kernel_cwnd
 
 
 
@@ -230,7 +231,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     # Capture server kernel log during this test.
     # Keep only CCRG messages, matching the earlier experiment script.
     server_log_cmd = (
-        "dmesg -w"
+        "dmesg -W"
     )
 
     start_bg_sudo(
@@ -393,7 +394,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
     }
 
 
-def process_results(jobs):
+def process_results(jobs, args):
 
     print("\nProcessing results for {} test(s)...".format(len(jobs)))
 
@@ -417,9 +418,16 @@ def process_results(jobs):
             resolution=0.001
         )
 
-        # server.log (kernel CCRG log) is downloaded and sitting at
-        # job["server_log_path"], but parsing/graphing it is deferred
-        # until kernel_log_analysis.py is built out - not called yet.
+        with open(job["server_log_path"]) as f:
+            log_text = f.read()
+        flows = parse_kernel_log(log_text, args.interval, args.duration)
+        if flows:
+            plot_kernel_cwnd(
+                clean_data(flows, args.interval, args.duration),
+                os.path.join(server_dir, "kernel_cwnd.png")
+            )
+        else:
+            print("    no complete HyStart++ flows in server.log, skipping kernel cwnd graph")
 
     print("Done processing results.")
 
@@ -526,7 +534,7 @@ def main():
 
     print("\nAll tests finished.")
 
-    process_results(all_jobs)
+    process_results(all_jobs, args)
 
     print("\nAll done.")
 
