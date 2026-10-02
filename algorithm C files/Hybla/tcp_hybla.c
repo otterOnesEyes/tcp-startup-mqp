@@ -149,17 +149,7 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 	odd = increment % 128;
 	tcp_snd_cwnd_set(tp, tcp_snd_cwnd(tp) + (increment >> 7));
 	ca->snd_cwnd_cents += odd;
-	ca->rnd = ca->rnd + 1;
-	int diff = tcp_snd_cwnd(tp) - prev;
-	int pct = (diff / prev);
-
-	if (is_slowstart == 1){
-		pr_info("[Hybla] [sk: %p] ROUND %u | stage: Slow Start, cwnd: %u, srtt: %u us, growth: %+d pkts (%+d%%)\n",
-				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, diff, pct);
-	} else {
-		pr_info("[Hybla] [sk: %p] ROUND %u | stage: Congestion Avoidance, cwnd: %u, srtt: %u us, growth: %+d pkts (%+d%%)\n",
-				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, diff, pct);
-	}
+	
 	/* check when fractions goes >=128 and increase cwnd by 1. */
 	while (ca->snd_cwnd_cents >= 128) {
 		tcp_snd_cwnd_set(tp, tcp_snd_cwnd(tp) + 1);
@@ -176,6 +166,18 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 		tcp_snd_cwnd_set(tp, min(tcp_snd_cwnd(tp), tp->snd_ssthresh));
 
 	tcp_snd_cwnd_set(tp, min(tcp_snd_cwnd(tp), tp->snd_cwnd_clamp));
+
+	ca->rnd = ca->rnd + 1;
+	int diff = tcp_snd_cwnd(tp) - prev;
+	int pct = (diff / prev) * 100;
+
+	if (is_slowstart == 1){
+		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Slow Start, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts (%+d%%)\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff, pct);
+	} else {
+		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Congestion Avoidance, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts (%+d%%)\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff, pct);
+	}
 }
 
 static struct tcp_congestion_ops tcp_hybla __read_mostly = {
