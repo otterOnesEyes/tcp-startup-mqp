@@ -140,16 +140,20 @@ def stop_bg_sudo(ssh, password, pidfile):
 
 
 def configure_server(ssh, password):
-    # Use standard Linux CUBIC.
+    # This would enforce CUBIC
+    """
     check(
         "set CUBIC",
         sudo(
             ssh,
             password,
             "sysctl -w net.ipv4.tcp_congestion_control=cubic"
-        )
+        )  
     )
+    """
 
+    # This would enforce Hystart being disabled
+    """
     # Disable standard CUBIC HyStart.
     hystart = "/sys/module/tcp_cubic/parameters/hystart"
 
@@ -161,6 +165,7 @@ def configure_server(ssh, password):
     ).format(shlex.quote(hystart))
 
     check("disable HyStart", sudo(ssh, password, cmd))
+    """
 
 
 def save_server_config(ssh, path, interface):

@@ -169,14 +169,13 @@ static void hybla_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 
 	ca->rnd = ca->rnd + 1;
 	int diff = tcp_snd_cwnd(tp) - prev;
-	int pct = (diff / prev) * 100;
 
 	if (is_slowstart == 1){
-		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Slow Start, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts (%+d%%)\n",
-				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff, pct);
+		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Slow Start, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff);
 	} else {
-		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Congestion Avoidance, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts (%+d%%)\n",
-				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff, pct);
+		pr_info("[Hybla] [sk: %p] ACK# %u | stage: Congestion Avoidance, cwnd: %u, srtt: %u us, ssthresh: %u, growth: %+d pkts\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, diff);
 	}
 }
 
