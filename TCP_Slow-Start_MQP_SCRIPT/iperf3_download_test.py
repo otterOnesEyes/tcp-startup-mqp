@@ -438,6 +438,8 @@ def process_results(jobs, args):
 
 
 def main():
+
+
     parser = argparse.ArgumentParser(
         description="Run CUBIC iperf3 download tests from a third machine."
     )
@@ -458,6 +460,16 @@ def main():
 
     parser.add_argument("--server-ssh-port", type=int, default=22)
     parser.add_argument("--client-ssh-port", type=int, default=22)
+    parser.add_argument(
+        "--location",
+        choices=["local", "remote"],
+        default="local",
+        help="Where to save results: 'local' (output-dir only) or 'remote' (OneDrive) "
+    )
+    parser.add_argument(
+        "--remote-dir",
+        help="Synced OneDrive folder to copy results to when --location is 'remote'. "
+    )
     parser.add_argument("--iperf_port", type=int, default=5201)
     parser.add_argument("--duration", type=int, default=10)
     parser.add_argument("--interval", type=float, default=1)
@@ -465,18 +477,30 @@ def main():
     parser.add_argument("--sleep-between-tests", type=int, default=5)
     parser.add_argument(
         "--output-dir",
-        default="./iperf3_download_results"
+        default="./iperf3_download_results", help="Directory to save results to. Will be created if it doesn't exist. Ignored if --location is 'remote'"
     )
 
     args = parser.parse_args()
 
+    if args.location == "remote":
+        if not args.remote_dir:
+            parser.error("--remote-dir is required when --location is 'remote'")
+        
+        if not os.path.isdir(os.path.abspath(os.path.expanduser(args.remote_dir))):
+            parser.error("--remote-dir must be a valid directory")
+            
+        args.output_dir = os.path.join(
+            os.path.abspath(os.path.expanduser(args.remote_dir)),
+            "iperf3_download_results"
+        )
+    os.makedirs(
+            os.path.abspath(os.path.expanduser(args.output_dir)),
+            exist_ok=True
+    )
+
     server_pass = getpass.getpass("Server SSH/sudo password: ")
     client_pass = getpass.getpass("Client SSH/sudo password: ")
 
-    os.makedirs(
-        os.path.abspath(os.path.expanduser(args.output_dir)),
-        exist_ok=True
-    )
 
     servers = []
     client = None
