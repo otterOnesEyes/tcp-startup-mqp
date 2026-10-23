@@ -37,6 +37,11 @@ from datetime import datetime
 
 import paramiko
 
+import json
+import urllib.request 
+import urllib.error
+import urllib.parse
+
 from pcap_analysis import analyze_pcap_and_plot
 from iperf_text_analysis import parse_cwnd, plot_cwnd
 from kernel_log_analysis import parse as parse_kernel_log, clean_data, plot_cwnd as plot_kernel_cwnd
@@ -137,6 +142,69 @@ def stop_bg_sudo(ssh, password, pidfile):
         "fi"
     ).format(pid=shlex.quote(pidfile))
     sudo(ssh, password, cmd)
+
+def get_weather_data():
+
+    wpi_lat = 42.2766632
+    wpi_lon = -71.8079906
+
+    WEATHER_FIELDS = [
+    "temperature_2m",
+    "relative_humidity_2m",
+    "precipitation",
+    "weather_code",
+    "wind_speed_10m",
+    ]
+    line = "unknown weather conditions"
+
+    try:
+        params = {
+            "latitude": wpi_lat,
+            "longitude": wpi_lon,
+            "current": ",".join(WEATHER_FIELDS),
+            "timezone": "America/New_York",
+            "wind_speed_unit": "mph",
+            "precipitation_unit": "inch",
+        }
+
+        url = "https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(params)
+
+        with urllib.request.urlopen(url, timeout = 10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+
+        current = data.get("current", {})
+        units = data.get("current_units", {})
+
+        obs_time = current.get("time")
+        temp = current.get("temperature_2m")
+        humidity = current.get("relative_humidity_2m")
+        precip = current.get("precipitation")
+        wind = current.get("wind_speed_10m")
+        code = current.get("weather_code")
+
+        WMO_CODES = {
+        0: "clear",
+        1: "mainly clear", 2: "partly cloudy", 3: "overcast",
+        45: "fog", 48: "freezing fog",
+        51: "light drizzle", 53: "drizzle", 55: "heavy drizzle",
+        61: "light rain", 63: "rain", 65: "heavy rain",
+        71: "light snow", 73: "snow", 75: "heavy snow",
+        80: "light rain showers", 81: "rain showers", 82: "heavy rain showers",
+        95: "thunderstorm",
+        }
+
+        line = "Weather: {} \n {}{}\n humidity {}{}\n wind {} {}\n precip {} {} (as of {})\n".format(
+        WMO_CODES.get(code, "code {}".format(code)),
+        temp, units.get("temperature_2m", ""),
+        humidity, units.get("relative_humidity_2m", ""),
+        wind, units.get("wind_speed_10m", ""),
+        precip, units.get("precipitation", ""),
+        obs_time,
+        )
+    except Exception as e:
+        print("Error fetching weather data: {}".format(e))
+
+    return line
 
 
 def configure_server(ssh, password):
@@ -250,7 +318,7 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
 
     # Server tcpdump.
     server_tcpdump = (
-        "tcpdump -i {} 'tcp and port {}' -s 200 -U -w {}"
+        "tcpdump -i {} 'tcp and port {}' -s 96 -U -w {}"
     ).format(
         shlex.quote(server_interface),
         args.iperf_port,
@@ -294,6 +362,10 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
         "/tmp/client_tcpdump.err",
     )
 
+    test_start_time = None
+    test_end_time = None
+
+
     time.sleep(1)
     print("Running iperf3 download test against server {}...".format(server_ip))
     try:
@@ -304,12 +376,14 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
             args.duration,
             args.interval
         )
+        test_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         check(
             "iperf3 download test",
             run(client, iperf_cmd, timeout=args.duration + 60)
         )
 
+        test_end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         time.sleep(1)
 
     finally:
@@ -378,6 +452,11 @@ def run_test(args, number, server_ssh, server_ip, server_interface, client, clie
         client_pass,
         "rm -f {}".format(shlex.quote(client_pcap))
     )
+    weather = get_weather_data()
+    with open(os.path.join(server_dir, "Environment.txt"), "w") as f:
+        f.write(weather + "\n")
+        f.write("Test start time: {}\n".format(test_start_time))
+        f.write("Test end time: {}\n".format(test_end_time))
 
     print("[OK] Raw results copied to:")
     print(run_dir)
