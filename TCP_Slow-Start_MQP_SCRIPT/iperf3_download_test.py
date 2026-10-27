@@ -645,7 +645,6 @@ def run_test(
 
         bind_flag = "-B {}".format(args.client_bind_ip) if args.client_bind_ip else ""
 
-
         # iperf_cmd = (
         #     "iperf3 -R -c {} {} -p {} -t {} -i {} {} -M 1300"
         # ).format(
