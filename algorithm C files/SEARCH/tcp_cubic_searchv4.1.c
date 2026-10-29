@@ -79,12 +79,6 @@ MODULE_PARM_DESC(hystart_low_window, "lower bound cwnd for hybrid slow start");
 module_param(hystart_ack_delta_us, int, 0644);
 MODULE_PARM_DESC(hystart_ack_delta_us, "spacing between ack's indicating train (usecs)");
 
-static inline bool search_should_log(const struct sock *sk)
-{
-        return (ntohs(inet_sk(sk)->inet_sport) == debug_port ||
-                ntohs(inet_sk(sk)->inet_dport) == debug_port);
-}
-
 //////////////////////// SEARCH ////////////////////////
 /*	enable SEARCH with command:
  		sudo sh -c "echo '1' > /sys/module/your_module_name/parameters/slow_start_mode"
@@ -133,6 +127,11 @@ module_param(debug_port, int, 0644);
 MODULE_PARM_DESC(debug_port, "Minimum threshold of missed bins before resetting SEARCH");
 
 
+static inline bool search_should_log(const struct sock *sk)
+{
+        return (ntohs(inet_sk(sk)->inet_sport) == debug_port ||
+                ntohs(inet_sk(sk)->inet_dport) == debug_port);
+}
 
 /* BIC TCP Parameters */
 struct bictcp {
