@@ -226,12 +226,13 @@ __bpf_kfunc static void cubictcp_init(struct sock *sk)
 
 	bictcp_reset(ca);
 
-	if (slow_start_mode == SS_SEARCH)
+	if (slow_start_mode == SS_SEARCH) {
 		bictcp_search_reset(sk);
 		if (search_should_log(sk)) {
-				pr_info("[SEARCH] [sk: %p] INIT -> SLOW_START | cwnd: %u, ssthresh: %u, mss: %u\n",
-						sk, tcp_snd_cwnd(tcp_sk(sk)), tcp_sk(sk)->snd_ssthresh, tcp_sk(sk)->mss_cache);
-			}
+			pr_info("[SEARCH] [sk: %p] INIT -> SLOW_START | cwnd: %u, ssthresh: %u, mss: %u\n",
+					sk, tcp_snd_cwnd(tcp_sk(sk)), tcp_sk(sk)->snd_ssthresh, tcp_sk(sk)->mss_cache);
+		}
+	}
 
 	if (slow_start_mode == SS_HYSTART)
 		bictcp_hystart_reset(sk);
@@ -479,6 +480,7 @@ __bpf_kfunc static u32 cubictcp_recalc_ssthresh(struct sock *sk)
 __bpf_kfunc static void cubictcp_state(struct sock *sk, u8 new_state)
 {
 
+	/*
 	if (slow_start_mode == SS_SEARCH && search_should_log(sk)) {
 			if (new_state == TCP_CA_Loss) {
 				pr_info("[SEARCH] [sk: %p] STAGE: %s -> LOSS (Forced Exit) | Reason: RTO/Timeout | cwnd: %u, ssthresh: %u, inflight: %u\n",
@@ -486,6 +488,7 @@ __bpf_kfunc static void cubictcp_state(struct sock *sk, u8 new_state)
 						tcp_snd_cwnd(tp), tp->snd_ssthresh, tcp_packets_in_flight(tp));
 		}
 	}
+	*/
 
 	if (new_state == TCP_CA_Loss) {
 		bictcp_reset(inet_csk_ca(sk));
@@ -1000,8 +1003,8 @@ static void search_update(struct sock *sk, u32 rtt_us)
 								if (search_should_log(sk)) {
 									pr_info("[SEARCH] [sk: %p] STAGE: SLOW_START -> CONGESTION_AVOIDANCE (Skip Drain) | Reason: %s | cwnd: %u, target_cwnd: %u, inflight: %u\n",
 											sk, 
-											(target_cwnd >= current_cwnd) ? "target >= cwnd" : "inflight <= target",
-											current_cwnd, target_cwnd, inflight);
+											(target_cwnd >= curr_cwnd) ? "target >= cwnd" : "inflight <= target",
+											curr_cwnd, target_cwnd, inflight);
 								}
 
 								bictcp_search_reset(sk);
