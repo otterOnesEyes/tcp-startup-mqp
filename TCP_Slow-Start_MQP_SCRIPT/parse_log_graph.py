@@ -121,6 +121,7 @@ def analyze_and_plot_log(log_filepath, output_image_path):
     print(f"    Isolated data socket: {data_socket} (Max cwnd: {max_cwnd_per_socket[data_socket]})")
 
     df_data = df[df['socket'] == data_socket].copy()
+    df_data = df_data.sort_values('timestamp')
     t0 = df_data['timestamp'].iloc[0]
     df_data['time_norm'] = df_data['timestamp'] - t0
 

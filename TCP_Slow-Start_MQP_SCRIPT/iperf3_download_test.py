@@ -52,6 +52,11 @@ from pcap_analysis import analyze_pcap_and_plot
 from iperf_text_analysis import parse_cwnd, plot_cwnd
 from kernel_log_analysis import parse as parse_kernel_log, clean_data, plot_cwnd as plot_kernel_cwnd
 from parse_log_graph import analyze_and_plot_log
+from pcap_throughput import analyze_and_plot_throughput
+from parse_log_minrtt import analyze_and_plot_minrtt
+from parse_pcap_rtt import analyze_and_plot_rtt
+from parse_log_pacing_rate import analyze_and_plot_pacing
+from collect_detailed_logs import collect_graphs
 
 
 def connect(ip, user, password, port=22):
@@ -355,7 +360,7 @@ def configure_server(ssh, password, algo, iperf_port, interface, client_route_ip
         sudo(
             ssh,
             password,
-            'sysctl -w net.ipv4.tcp_wmem="200000000 200000000 200000000"'
+            'sysctl -w net.ipv4.tcp_wmem="4096 16384 200000000"'
         )
     )
 
@@ -364,7 +369,7 @@ def configure_server(ssh, password, algo, iperf_port, interface, client_route_ip
         sudo(
             ssh,
             password,
-            'sysctl -w net.ipv4.tcp_rmem="200000000 200000000 200000000"'
+            'sysctl -w net.ipv4.tcp_rmem="4096 131072 200000000"'
         )
     )
 
@@ -382,12 +387,16 @@ def configure_server(ssh, password, algo, iperf_port, interface, client_route_ip
         )
     elif algo_lower == "suss":
         check(
-            "set reno for suss",
-            sudo(ssh, password, "sysctl -w net.ipv4.tcp_congestion_control=reno")
+            "set cubic for suss",
+            sudo(ssh, password, "sysctl -w net.ipv4.tcp_congestion_control=cubic")
         )
         check(
             "enable suss",
             sudo(ssh, password, "sh -c 'echo 1 > /sys/module/tcp_cubic/parameters/suss'")
+        )
+        check(
+            "disable hystart",
+            sudo(ssh, password, "sh -c 'echo 0 > /sys/module/tcp_cubic/parameters/hystart'")
         )
     elif algo_lower in ["hystart++", "hystartplusplus"]:
         check(
@@ -438,6 +447,23 @@ def configure_server(ssh, password, algo, iperf_port, interface, client_route_ip
             password,
             route_cmd
         )
+    elif algo_lower in ["search5.0"]:
+        check(
+            "load tcp_cubic_search module",
+            sudo(ssh, password, "modprobe tcp_cubic_search")
+        )
+        route_cmd = "ip route replace {} via {} dev {} congctl cubic_search".format(
+            client_route_ip,
+            server_gateway,
+            interface
+        )
+        best_effort(
+            "apply cubic_search5 routing rule",
+            sudo,
+            ssh,
+            password,
+            route_cmd
+        )
     else:
         raise ValueError("Unknown algorithm specified: {}".format(algo))
 
@@ -482,6 +508,9 @@ echo
 echo "===== cubic_search module params ====="
 cat /sys/module/tcp_cubic_search/parameters/* 2>/dev/null || echo "N/A or no parameters exposed"
 echo
+echo "===== cubic_search5 module params ====="
+cat /sys/module/tcp_cubic_search5/parameters/* 2>/dev/null || echo "N/A or no parameters exposed"
+echo
 echo "===== interface ====="
 ip addr show dev {iface}
 echo
@@ -517,10 +546,11 @@ def run_test(
     server_id = server_ip.replace(".", "_")
 
     server_root = os.path.join(run_dir, "servers", server_id)
-    server_dir = run_dir
+    server_dir = os.path.join(server_root, "server")
     client_dir = os.path.join(server_root, "client")
 
     os.makedirs(server_dir, exist_ok=True)
+    os.makedirs(client_dir, exist_ok=True)
 
     remote_tag = "{}_{}".format(name, server_id)
 
@@ -644,19 +674,8 @@ def run_test(
 
         bind_flag = "-B {}".format(args.client_bind_ip) if args.client_bind_ip else ""
 
-        # iperf_cmd = (
-        #     "iperf3 -R -c {} {} -p {} -t {} -i {} {} -M 1300"
-        # ).format(
-        #     shlex.quote(server_ip),
-        #     bind_flag,
-        #     args.iperf_port,
-        #     args.duration,
-        #     args.interval,
-        #     extra_flags,
-        # ).strip()
-        # iperf_cmd = " ".join(iperf_cmd.split())
         iperf_cmd = (
-            "iperf3 -R -c {} {} -p {} -t {} -i {} {}"
+            "iperf3 -R -c {} {} -p {} -t {} -i {} {} -M 1300"
         ).format(
             shlex.quote(server_ip),
             bind_flag,
@@ -794,7 +813,7 @@ def run_test(
     )
 
     weather = get_weather_data()
-    with open(os.path.join(server_dir, "environment.txt"), "w") as f:
+    with open(os.path.join(server_dir, "Environment.txt"), "w") as f:
         f.write("Test Conditions For: {}\n".format(args.title) if args.title else "Test Environment Conditions\n")
         f.write(weather + "\n")
         f.write("TCP Algorithm: {}, server IP: {}\n".format(algo, server_ip))
@@ -808,6 +827,7 @@ def run_test(
         "server_ip": server_ip,
         "run_dir": run_dir,
         "server_dir": server_dir,
+        "client_dir": client_dir,
         "iperf_text_path": local_iperf_txt,
         "server_pcap_path": local_server_pcap,
         "server_log_path": local_server_log,
@@ -818,7 +838,6 @@ def run_test(
 
 
 def process_single_job(job, args):
-
     server_dir = job["server_dir"]
     server_ip = job["server_ip"]
     print(" - Processing {} (server {})".format(job["run_dir"], server_ip))
@@ -839,15 +858,35 @@ def process_single_job(job, args):
 
     pcap_path = job["server_pcap_path"]
     if os.path.isfile(pcap_path):
+
         try:
             analyze_pcap_and_plot(
                 pcap_path,
-                os.path.join(server_dir, "throughput.png"),
-                resolution=0.1,
-                server_port="--iperf_port"
+                os.path.join(server_dir, "bytes_in_flight.png"),
+                resolution=0.001,
             )
         except Exception as exc:
-            print(" [WARNING] Could not analyze server PCAP for {}: {}".format(server_ip, exc))
+            print(" [WARNING] Could not create bytes in flight graph for {}: {}".format(server_ip, exc))
+
+        try:
+            analyze_and_plot_throughput(
+                pcap_path,
+                os.path.join(server_dir, "pcap_throughput.png"),
+                interval=0.1,
+            )
+        except Exception as exc:
+            print(" [WARNING] Could not create PCAP throughput graph for {}: {}".format(server_ip, exc))
+
+        # --- NEW PCAP RTT GRAPH LOGIC ---
+        try:
+            analyze_and_plot_rtt(
+                pcap_path,
+                os.path.join(server_dir, "rtt_graph.png")
+            )
+        except Exception as exc:
+            print(" [WARNING] Could not create RTT graph for {}: {}".format(server_ip, exc))
+        # --------------------------------
+
     else:
         print(" [SKIP] Server PCAP is missing for {}.".format(server_ip))
 
@@ -880,6 +919,23 @@ def process_single_job(job, args):
                 )
             except Exception as exc:
                 print(" [WARNING] Could not create detailed log graph for {}: {}".format(server_ip, exc))
+
+            try:
+                analyze_and_plot_minrtt(
+                    log_path,
+                    os.path.join(server_dir, "minrtt_graph.png")
+                )
+            except Exception as exc:
+                print(" [WARNING] Could not create minRTT graph for {}: {}".format(server_ip, exc))
+
+            try:
+                analyze_and_plot_pacing(
+                    log_path,
+                    os.path.join(server_dir, "pacing_rate_graph.png")
+                )
+            except Exception as exc:
+                print(" [WARNING] Could not create pacing rate graph for {}: {}".format(server_ip, exc))
+
         except Exception as exc:
             print(" [WARNING] Could not process kernel log for {}: {}".format(server_ip, exc))
     else:
@@ -887,7 +943,6 @@ def process_single_job(job, args):
 
 
 def process_results(jobs, args):
-
     print("\nProcessing results for {} test(s) in parallel...".format(len(jobs)))
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -918,6 +973,14 @@ def main():
         required=True,
         help="Client IP, SSH user, and interface to capture on",
     )
+
+    # NEW ARGUMENTS FOR NIC AUTOMATION
+    parser.add_argument("--client-orig-nic",
+                        help="Original NIC name to rename (e.g., enp9s0f0). Must be used alongside --client.")
+    parser.add_argument("--client-mtu", type=int, help="Change the MTU of the client interface (e.g., 1360).")
+    parser.add_argument("--client-gateway",
+                        help="Optional client gateway IP to restore routes to the servers after a NIC rename.")
+
     parser.add_argument("--server-ssh-port", type=int, default=22)
     parser.add_argument("--client-ssh-port", type=int, default=22)
 
@@ -926,7 +989,6 @@ def main():
     parser.add_argument("--client-route-ip",
                         help="Target IP for server ip route command. Defaults to the client IP if not set.")
     parser.add_argument("--server-gateway", default="130.215.24.1", help="Gateway IP for server ip route command")
-
 
     parser.add_argument(
         "--title",
@@ -1017,6 +1079,38 @@ def main():
             client_pass,
             args.client_ssh_port,
         )
+
+        # APPLY NIC AUTOMATION
+        if args.client_orig_nic and args.client_orig_nic != client_interface:
+            print("[INFO] Renaming client NIC from {} to {}...".format(args.client_orig_nic, client_interface))
+            rename_cmd = (
+                "ip link set {orig} down && "
+                "ip link set {orig} name {new} && "
+                "ip link set {new} up"
+            ).format(orig=shlex.quote(args.client_orig_nic), new=shlex.quote(client_interface))
+            best_effort("rename client NIC", sudo, client, client_pass, rename_cmd)
+
+            print("[INFO] Restoring client routes to test servers...")
+            for server_data in args.servers:
+                target_ip = server_data[0]
+                if args.client_gateway:
+                    route_cmd = "ip route add {} via {} dev {}".format(
+                        shlex.quote(target_ip),
+                        shlex.quote(args.client_gateway),
+                        shlex.quote(client_interface)
+                    )
+                else:
+                    route_cmd = "ip route add {} dev {}".format(
+                        shlex.quote(target_ip),
+                        shlex.quote(client_interface)
+                    )
+                best_effort("restore client route for {}".format(target_ip), sudo, client, client_pass, route_cmd)
+
+        if args.client_mtu:
+            print("[INFO] Setting MTU on {} to {}...".format(client_interface, args.client_mtu))
+            mtu_cmd = "ifconfig {} mtu {}".format(shlex.quote(client_interface), args.client_mtu)
+            best_effort("set client MTU", sudo, client, client_pass, mtu_cmd)
+        # END NIC AUTOMATION
 
         for i in range(1, args.num_tests + 1):
             name = "run_{:03d}".format(i)
@@ -1133,6 +1227,10 @@ def main():
 
         print("\nTest campaign finished.")
         process_results(all_jobs, args)
+
+        print("\nCollecting detailed log graphs...")
+        collect_graphs(session_dir)
+
         print("\nAll done.")
 
 
