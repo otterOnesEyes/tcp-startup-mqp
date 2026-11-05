@@ -517,11 +517,10 @@ def run_test(
     server_id = server_ip.replace(".", "_")
 
     server_root = os.path.join(run_dir, "servers", server_id)
-    server_dir = os.path.join(server_root, "server")
+    server_dir = run_dir
     client_dir = os.path.join(server_root, "client")
 
     os.makedirs(server_dir, exist_ok=True)
-    os.makedirs(client_dir, exist_ok=True)
 
     remote_tag = "{}_{}".format(name, server_id)
 
@@ -795,9 +794,10 @@ def run_test(
     )
 
     weather = get_weather_data()
-    with open(os.path.join(server_dir, "Environment.txt"), "w") as f:
+    with open(os.path.join(server_dir, "environment.txt"), "w") as f:
+        f.write("Test Conditions For: {}\n".format(args.title) if args.title else "Test Environment Conditions\n")
         f.write(weather + "\n")
-        f.write("TCP Algorithm: {}\n".format(algo))
+        f.write("TCP Algorithm: {}, server IP: {}\n".format(algo, server_ip))
         f.write("Test start time: {}\n".format(test_start_time))
         f.write("Test end time: {}\n".format(test_end_time))
 
@@ -808,11 +808,11 @@ def run_test(
         "server_ip": server_ip,
         "run_dir": run_dir,
         "server_dir": server_dir,
-        "client_dir": client_dir,
         "iperf_text_path": local_iperf_txt,
         "server_pcap_path": local_server_pcap,
         "server_log_path": local_server_log,
         "download_status": download_status,
+        "title": args.title,
         "_server_ssh": server_ssh,
     }
 
@@ -842,8 +842,9 @@ def process_single_job(job, args):
         try:
             analyze_pcap_and_plot(
                 pcap_path,
-                os.path.join(server_dir, "bytes_in_flight.png"),
-                resolution=0.001,
+                os.path.join(server_dir, "throughput.png"),
+                resolution=0.1,
+                server_port="--iperf_port"
             )
         except Exception as exc:
             print(" [WARNING] Could not analyze server PCAP for {}: {}".format(server_ip, exc))
@@ -926,6 +927,13 @@ def main():
                         help="Target IP for server ip route command. Defaults to the client IP if not set.")
     parser.add_argument("--server-gateway", default="130.215.24.1", help="Gateway IP for server ip route command")
 
+
+    parser.add_argument(
+        "--title",
+        default="",
+        help="Optional: Title for the test run"
+    )
+
     parser.add_argument(
         "--location",
         choices=["local", "remote"],
@@ -962,7 +970,7 @@ def main():
     server_pass = getpass.getpass("Server SSH/sudo password: ")
     client_pass = getpass.getpass("Client SSH/sudo password: ")
 
-    session_stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    session_stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S - {}".format(args.title) if args.title else "%Y-%m-%d_%H-%M-%S")
     session_dir = os.path.join(
         os.path.abspath(os.path.expanduser(args.output_dir)),
         session_stamp,
