@@ -675,7 +675,7 @@ def run_test(
         bind_flag = "-B {}".format(args.client_bind_ip) if args.client_bind_ip else ""
 
         iperf_cmd = (
-            "iperf3 -R -c {} {} -p {} -t {} -i {} {} -M 1300"
+            "iperf3 -R -c {} {} -p {} -t {} -i {} {}"
         ).format(
             shlex.quote(server_ip),
             bind_flag,
@@ -685,6 +685,18 @@ def run_test(
             extra_flags,
         ).strip()
         iperf_cmd = " ".join(iperf_cmd.split())
+
+        # iperf_cmd = (
+        #     "iperf3 -R -c {} {} -p {} -t {} -i {} {} -M 1300"
+        # ).format(
+        #     shlex.quote(server_ip),
+        #     bind_flag,
+        #     args.iperf_port,
+        #     args.duration,
+        #     args.interval,
+        #     extra_flags,
+        # ).strip()
+        # iperf_cmd = " ".join(iperf_cmd.split())
 
         test_start_time = "N/A"
         test_end_time = "N/A"
