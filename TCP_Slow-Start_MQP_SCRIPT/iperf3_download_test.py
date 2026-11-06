@@ -546,11 +546,9 @@ def run_test(
     server_id = server_ip.replace(".", "_")
 
     server_root = os.path.join(run_dir, "servers", server_id)
-    server_dir = os.path.join(server_root, "server")
-    client_dir = os.path.join(server_root, "client")
+    server_dir = server_root
 
     os.makedirs(server_dir, exist_ok=True)
-    os.makedirs(client_dir, exist_ok=True)
 
     remote_tag = "{}_{}".format(name, server_id)
 
