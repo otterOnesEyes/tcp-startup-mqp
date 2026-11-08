@@ -1339,18 +1339,7 @@ __bpf_kfunc static void cubictcp_acked(struct sock *sk, const struct ack_sample 
 	if (sample->rtt_us < 0)
 		return;
 
-	/* Discard delay samples right after fast recovery */
-	if (ca->epoch_start && (s32)(tcp_jiffies32 - ca->epoch_start) < HZ)
-		return;
-
-	delay = sample->rtt_us;
-	if (delay == 0)
-		delay = 1;
-
-	/* first time call or link delay decreases */
-	if (ca->delay_min == 0 || ca->delay_min > delay)
-		ca->delay_min = delay;
-
+	/* Log before RTT filtering; the stored minimum RTT is unchanged here. */
 	if (slow_start_mode == SS_SEARCH && search_should_log(sk)) {
 		const char *stage_str = "UNKNOWN";
 		const char *thresh_mode =
@@ -1379,11 +1368,25 @@ __bpf_kfunc static void cubictcp_acked(struct sock *sk, const struct ack_sample 
 		}
 
 		pr_info("[SEARCH] [sk: %p] ACK | stage: %s, cwnd: %u, rtt: %u us, inflight: %u, exit_thresh: %d%% (%s), growth_factor: %u.%02u\n",
-			sk, stage_str, tcp_snd_cwnd(tp), delay,
+			sk, stage_str, tcp_snd_cwnd(tp), (u32)(sample->rtt_us ? sample->rtt_us : 1),
 			tcp_packets_in_flight(tp), (int)exit_thresh, thresh_mode,
 			search_log_growth_factor(ca) / 100,
 			search_log_growth_factor(ca) % 100);
 	}
+
+	/* Discard delay samples right after fast recovery */
+	if (ca->epoch_start && (s32)(tcp_jiffies32 - ca->epoch_start) < HZ)
+		return;
+
+	delay = sample->rtt_us;
+	if (delay == 0)
+		delay = 1;
+
+	/* first time call or link delay decreases */
+	if (ca->delay_min == 0 || ca->delay_min > delay)
+		ca->delay_min = delay;
+
+
 
 	if (tcp_in_slow_start(tp)) {
 		if (slow_start_mode == SS_SEARCH) {

@@ -884,7 +884,8 @@ def process_single_job(job, args):
             analyze_and_plot_throughput(
                 pcap_path,
                 os.path.join(server_dir, "pcap_throughput.png"),
-                interval=0.1,
+                interval=0.01,
+                server_port=args.iperf_port,
             )
         except Exception as exc:
             print(" [WARNING] Could not create PCAP throughput graph for {}: {}".format(server_ip, exc))

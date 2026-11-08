@@ -7,9 +7,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-PLOT_MIN_RTT = True
 PLOT_PHASE_CHANGES = True
-ALGORITHMS = ['[HyStart++]', '[SUSS]', '[HyStart]', '[SEARCH]', '[BBR]', '[Hybla]']
+ALGORITHMS = ['[HyStart++]', '[SUSS]', '[HyStart]', '[SEARCH]', '[BBR]', '[Hybla]', '[SLOW_START]']
 
 
 def parse_dmesg_log(filepath):
@@ -20,7 +19,6 @@ def parse_dmesg_log(filepath):
     time_pattern = re.compile(r'^\[\s*([\d\.]+)\]')
     sk_pattern = re.compile(r'\[sk:\s*([a-f0-9]+)\]')
     cwnd_pattern = re.compile(r'cwnd:\s*(\d+)')
-    rtt_pattern = re.compile(r'min_rtt:\s*(\d+)')
     mss_pattern = re.compile(r'mss:\s*(\d+)')
 
     # Matches explicit transitions like "STAGE: SLOW_START -> CSS"
@@ -56,13 +54,8 @@ def parse_dmesg_log(filepath):
                             'timestamp': t,
                             'socket': sk,
                             'cwnd': int(cwnd_match.group(1)),
-                            'min_rtt': None,
                             'mss': None
                         }
-                        rtt_match = rtt_pattern.search(line)
-                        if rtt_match:
-                            entry['min_rtt'] = int(rtt_match.group(1)) / 1000.0
-
                         mss_match = mss_pattern.search(line)
                         if mss_match:
                             entry['mss'] = int(mss_match.group(1))
@@ -128,15 +121,6 @@ def analyze_and_plot_log(log_filepath, output_image_path):
     df_data['mss'] = df_data['mss'].ffill().fillna(1460)
     df_data['cwnd_mb'] = (df_data['cwnd'] * df_data['mss']) / (1024 * 1024)
 
-    df_valid_rtt = df_data[(df_data['min_rtt'].notna()) & (df_data['min_rtt'] > 0)].copy()
-    if not df_valid_rtt.empty:
-        df_valid_rtt['throughput_mbps'] = (df_valid_rtt['cwnd'] * df_valid_rtt['mss'] * 8) / (
-                df_valid_rtt['min_rtt'] / 1000.0) / 1e6
-        median_throughput = df_valid_rtt['throughput_mbps'].median()
-        print(f"    Median Throughput: {median_throughput:.2f} Mbps")
-    else:
-        print("    Median Throughput: N/A (no valid min_rtt data found)")
-
     df_events_target = df_events[df_events['socket'] == data_socket].copy() if not df_events.empty else pd.DataFrame()
 
     if not df_events_target.empty:
@@ -187,24 +171,10 @@ def analyze_and_plot_log(log_filepath, output_image_path):
                      verticalalignment='top', horizontalalignment='right',
                      fontsize=9, fontweight='bold', alpha=0.9)
 
-    if PLOT_MIN_RTT:
-        df_rtt = df_data.dropna(subset=['min_rtt'])
-        ax2 = ax1.twinx()
-        color2 = 'tab:red'
-        ax2.set_ylabel('Minimum RTT (ms)', color=color2, fontweight='bold')
-        ax2.plot(df_rtt['time_norm'], df_rtt['min_rtt'], color=color2, marker='s', linestyle='--', linewidth=2,
-                 alpha=0.8, label='min_rtt')
-        ax2.tick_params(axis='y', labelcolor=color2)
-        ax2.set_ylim(bottom=0)
-
-        lines_1, labels_1 = ax1.get_legend_handles_labels()
-        lines_2, labels_2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left')
-    else:
-        ax1.legend(loc='upper left')
+    ax1.legend(loc='upper left')
 
 
-    plt.title(f'{detected_algo} - Congestion Window & RTT vs. Time', fontweight='bold')
+    plt.title(f'{detected_algo} - Congestion Window vs. Time', fontweight='bold')
     plt.tight_layout()
 
     plt.savefig(output_image_path)
