@@ -65,8 +65,8 @@ static void hybla_init(struct sock *sk)
 	/* set minimum rtt as this is the 1st ever seen */
 	ca->minrtt_us = tp->srtt_us;
 	tcp_snd_cwnd_set(tp, ca->rho);
-	pr_info("[Hybla] [sk: %p] ACK# %u | stage: Slow Start, cwnd: %u, srtt: %u us, ssthresh: %u, mss: %u, growth: %+d pkts\n",
-				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, tp->mss_cache, diff);
+	pr_info("[Hybla] [sk: %p] ACK# %u | stage: Slow Start, cwnd: %u, srtt: %u us, ssthresh: %u, mss: %u\n",
+				sk, ca->rnd, tcp_snd_cwnd(tp), tp->srtt_us, tp->snd_ssthresh, tp->mss_cache);
 }
 
 static void hybla_state(struct sock *sk, u8 ca_state)
