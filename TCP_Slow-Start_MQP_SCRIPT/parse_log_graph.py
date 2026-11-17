@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 PLOT_MIN_RTT = True
 PLOT_PHASE_CHANGES = True
-ALGORITHMS = ['[HyStart++]', '[SUSS]', '[HyStart]', '[SEARCH]', '[BBR]', '[Hybla]']
+ALGORITHMS = ['[HyStart++]', '[SUSS]', '[HyStart]', '[SEARCH]', '[BBR]', '[Hybla]', '[Standard Slow Start]']
 
 
 def parse_dmesg_log(filepath):

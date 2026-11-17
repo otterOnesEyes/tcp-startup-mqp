@@ -545,8 +545,8 @@ def run_test(
 ):
     server_id = server_ip.replace(".", "_")
 
-    server_root = os.path.join(run_dir, "servers", server_id)
-    server_dir = server_root
+    # Save artifacts directly in the run folder (e.g. <algo>/run_001/)
+    server_dir = run_dir
 
     os.makedirs(server_dir, exist_ok=True)
 
@@ -837,7 +837,6 @@ def run_test(
         "server_ip": server_ip,
         "run_dir": run_dir,
         "server_dir": server_dir,
-        "client_dir": client_dir,
         "iperf_text_path": local_iperf_txt,
         "server_pcap_path": local_server_pcap,
         "server_log_path": local_server_log,
@@ -1236,10 +1235,19 @@ def main():
                 pass
 
         print("\nTest campaign finished.")
-        process_results(all_jobs, args)
+        if all_jobs:
+            process_results(all_jobs, args)
 
-        print("\nCollecting detailed log graphs...")
-        collect_graphs(session_dir)
+            print("\nCollecting detailed log graphs...")
+            collect_graphs(session_dir)
+        else:
+            # Nothing ran: don't leave behind a session folder holding only
+            # an empty Summary_Detailed_Logs directory.
+            print("[INFO] No tests completed; removing empty session directory.")
+            try:
+                os.rmdir(session_dir)
+            except OSError:
+                pass  # not empty, leave it
 
         print("\nAll done.")
 

@@ -36,20 +36,13 @@ def collect_graphs(base_dir):
             for graph_path in graphs:
                 # Extract run number and server ID from the path to avoid name collisions
                 run_name = "unknown_run"
-                for part in graph_path.parts:
+                for part in graph_path.relative_to(algo_dir).parts:
                     if part.startswith("run_"):
                         run_name = part
                         break
 
-                server_id = "unknown_server"
-                parts = graph_path.parts
-                if "servers" in parts:
-                    idx = parts.index("servers")
-                    if idx + 1 < len(parts):
-                        server_id = parts[idx + 1]
-
-                # Rename the copied file to include the run and server info
-                new_filename = f"{run_name}_{server_id}_detailed_log_graph.png"
+                # Rename the copied file to include the run number
+                new_filename = f"{run_name}_detailed_log_graph.png"
                 dest_path = algo_summary / new_filename
 
                 shutil.copy2(graph_path, dest_path)
